@@ -36,6 +36,13 @@ public class AuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String path = request.getRequestURI().substring(request.getContextPath().length());
+        // 仅允许读取前端入口和构建资源；管理接口仍需单独鉴权。
+        if (("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod()))
+                && ("/".equals(path) || "/index.html".equals(path)
+                    || path.matches("/assets/[A-Za-z0-9_-]+\\.(js|css)"))) {
+            chain.doFilter(request, response);
+            return;
+        }
         if (!path.startsWith("/api/")) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;

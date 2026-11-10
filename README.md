@@ -1,6 +1,6 @@
 # monitor-server
 
-统一监控平台服务端。当前提供 Linux 服务器登记、Agent 凭据签发与心跳、主机指标上报查询，以及可扩展的受管实例登记接口。此阶段不包含 Agent 程序、前端、Nginx 专属管理或告警功能。
+统一监控平台服务端。当前提供 Linux 服务器登记、Agent 凭据签发与心跳、主机指标上报查询，以及可扩展的受管实例登记接口。提供同源管理页面；此阶段不包含 Agent 程序、Nginx 专属管理或告警功能。
 
 ## 环境与启动
 
@@ -8,11 +8,25 @@
 
 ```bash
 export MONITOR_ADMIN_TOKEN='替换为至少32字符的随机令牌'
-mvn -DskipTests package
+mvn -DskipTests clean package
 java -jar target/monitor-server-0.1.0-SNAPSHOT.jar
 ```
 
 默认绑定 `127.0.0.1:8080`，仅用于本机访问。多服务器接入时，可以通过 `MONITOR_BIND_ADDRESS` 指定监听地址，并在受信任网络中部署 TLS 反向代理、限制来源及保护令牌；当前服务本身没有实现 TLS、双向证书认证或用户角色，不能直接暴露到公网。
+
+启动后访问 `http://127.0.0.1:8080/`，输入管理员令牌。令牌只保存在当前页面内存中，刷新页面需要重新输入。页面支持服务器登记、筛选、Agent 凭据签发与轮换、主机指标和受管实例查看与登记；指标由 Agent 上报，未安装或未上报时显示暂无数据。
+
+前端源码位于 `web/`，仓库同时保存构建后的静态资源，因此使用 Maven 打包不需要 Node.js。修改前端后需要先重新构建，再执行 Maven 打包：
+
+```bash
+cd web
+npm ci
+npm run build
+cd ..
+mvn -DskipTests clean package
+```
+
+前端开发需要 Node.js 18 或更高版本；`npm run dev` 使用 Vite 开发服务器，默认将 `/api` 请求代理至 `http://127.0.0.1:8080`。执行 `npm run build` 会更新 `src/main/resources/static/`，提交前应同时提交源码、锁文件及生成的静态资源。
 
 可配置项：
 
