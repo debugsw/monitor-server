@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: ${MONITOR_DB_URL:jdbc:h2:file:./data/monitor}
+    username: ${MONITOR_DB_USERNAME:sa}
+    password: ${MONITOR_DB_PASSWORD:}
+  flyway:
+    enabled: true
+server:
+  address: ${MONITOR_BIND_ADDRESS:127.0.0.1}
+monitor:
+  admin-token: ${MONITOR_ADMIN_TOKEN:}
+  agent-online-seconds: ${MONITOR_AGENT_ONLINE_SECONDS:30}
