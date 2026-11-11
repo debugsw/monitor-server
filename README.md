@@ -1,6 +1,6 @@
 # monitor-server
 
-统一监控平台服务端。当前提供 Linux 服务器登记、Agent 凭据签发与心跳、主机指标上报查询，以及可扩展的受管实例登记接口。提供同源管理页面；此阶段不包含 Agent 程序、Nginx 专属管理或告警功能。
+统一监控平台服务端。当前提供 Linux 服务器登记、Agent 凭据签发与心跳、主机指标上报查询，以及可扩展的受管实例登记接口。提供同源管理页面；提供 Linux Agent；此阶段不包含 Nginx 专属管理或告警功能。
 
 ## 环境与启动
 
@@ -74,3 +74,38 @@ mvn -DskipTests clean package
 ## 数据库
 
 首个迁移 `V1__base_platform.sql` 创建 `ops_server`、`ops_agent`、`ops_instance`、`ops_host_metric` 四张表，以及实例归属和主机指标时间索引；不预置业务数据。当前默认支持 H2 文件数据库，不应在多个服务端进程间直接共享同一个数据库文件。
+
+## Linux Agent
+
+Agent 位于 `agent/`，为独立 Java 17 程序，使用 Linux `/proc` 和 Java 文件系统接口采集，无需修改 Nginx 或业务应用。本次不增加数据库表、字段或索引。
+
+构建：
+
+```bash
+mvn -f agent/pom.xml -DskipTests package
+```
+
+在管理页面登记服务器并注册 Agent，保存一次性显示的 Agent 令牌。Linux 主机上创建仅 Agent 运行账号可读的令牌文件，再配置环境变量：
+
+```bash
+export MONITOR_AGENT_SERVER_URL='https://monitor.example.com/'
+export MONITOR_AGENT_TOKEN_FILE='/etc/monitor-agent/token'
+java -jar agent/target/monitor-agent-0.1.0-SNAPSHOT.jar
+```
+
+服务端默认仅监听本机；远程接入需配置可信 TLS 反向代理及网络访问。Agent 默认使用 JVM 的系统信任库验证 HTTPS 证书，不跟随 HTTP 重定向。为防止令牌明文传输，仅允许本机回环地址使用 HTTP；请使用 TLS 保护远程访问。也可用 `MONITOR_AGENT_TOKEN` 提供令牌，但令牌文件优先，避免将凭据写在命令行中。
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `MONITOR_AGENT_SERVER_URL` | 无 | 必填，平台地址；可包含反向代理路径前缀 |
+| `MONITOR_AGENT_TOKEN_FILE` | 无 | Agent 令牌文件路径，优先于环境变量令牌 |
+| `MONITOR_AGENT_TOKEN` | 无 | 未指定令牌文件时必填 |
+| `MONITOR_AGENT_INTERVAL_SECONDS` | 5 | 心跳及采集间隔，1–3600 秒；应小于服务端在线判定时间 |
+| `MONITOR_AGENT_TIMEOUT_SECONDS` | 5 | 连接和请求超时，1–60 秒 |
+| `MONITOR_AGENT_DISK_PATH` | `/` | 统计所在文件系统的路径 |
+| `MONITOR_AGENT_NETWORK_INTERFACE` | 自动 | 指定网卡名；未指定时选择第一条启用的 IPv4 默认路由网卡 |
+| `MONITOR_AGENT_PROC_ROOT` | `/proc` | Linux proc 挂载路径；容器内需确认其代表目标主机 |
+
+CPU 使用率根据 `/proc/stat` 两次采样计算，第一条指标在一个采集周期后产生；内存已用量为 `MemTotal - MemAvailable`；磁盘为指定路径所在文件系统的总量与已用量；网络为选定网卡自系统启动以来的累计字节数。网卡切换或计数器重置会影响累计值比较。缺失必要数据时该次指标不上报，日志记录错误。心跳与指标独立执行，上报失败将在下一周期继续尝试，不持久化或补传失败的历史采样；`401` 表示凭据无效，重新签发后需更新令牌并重启 Agent。
+
+`agent/deploy/monitor-agent.service` 是 systemd 配置示例，不会自动安装或创建账号。使用前需自行创建低权限 `monitor-agent` 用户、安装 JAR 到示例路径，并准备权限受限的 `/etc/monitor-agent/agent.env` 和令牌文件；按实际 Linux 环境调整 Java、服务地址和目录后再启用。
