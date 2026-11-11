@@ -107,12 +107,12 @@ mvn -f agent/pom.xml -DskipTests package
 在管理页面登记服务器并注册 Agent，保存一次性显示的 Agent 令牌。Linux 主机上创建仅 Agent 运行账号可读的令牌文件，再配置环境变量：
 
 ```bash
-export MONITOR_AGENT_SERVER_URL='https://monitor.example.com/'
+export MONITOR_AGENT_SERVER_URL='http://monitor.example.com:8080/'
 export MONITOR_AGENT_TOKEN_FILE='/etc/monitor-agent/token'
 java -jar agent/target/monitor-agent-0.1.0-SNAPSHOT.jar
 ```
 
-服务端默认仅监听本机；远程接入需配置可信 TLS 反向代理及网络访问。Agent 默认使用 JVM 的系统信任库验证 HTTPS 证书，不跟随 HTTP 重定向。为防止令牌明文传输，仅允许本机回环地址使用 HTTP；请使用 TLS 保护远程访问。也可用 `MONITOR_AGENT_TOKEN` 提供令牌，但令牌文件优先，避免将凭据写在命令行中。
+服务端默认仅监听本机；远程接入需将 MONITOR_BIND_ADDRESS 设置为合适的网卡地址并限制网络访问。Agent 支持 HTTP 和 HTTPS，不跟随 HTTP 重定向。HTTP 会明文传输令牌和数据，请仅在可信网络中使用；使用 HTTPS 时由 JVM 信任库验证证书。也可用 `MONITOR_AGENT_TOKEN` 提供令牌，但令牌文件优先，避免将凭据写在命令行中。
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |

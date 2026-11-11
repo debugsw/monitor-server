@@ -32,15 +32,14 @@ public class AgentConfig {
     /** 获取 proc 路径。 */ public Path procRoot() { return procRoot; }
     /** 获取磁盘路径。 */ public Path diskPath() { return diskPath; }
     /** 获取网卡名称。 */ public String networkInterface() { return networkInterface; }
-    /** 读取并校验配置，默认禁止向非本机地址明文传输令牌。 */
+    /** 读取并校验配置，支持 HTTP 和 HTTPS 服务地址。 */
     public static AgentConfig fromEnvironment(Map<String, String> env) throws IOException {
         String address = required(env, "MONITOR_AGENT_SERVER_URL");
         URI uri = URI.create(address);
         String host = uri.getHost();
-        boolean local = "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "[::1]".equals(host) || "::1".equals(host);
         if (host == null || uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null ||
-                !("https".equalsIgnoreCase(uri.getScheme()) || ("http".equalsIgnoreCase(uri.getScheme()) && local))) {
-            throw new IllegalArgumentException("服务地址必须为 HTTPS，HTTP 仅允许本机地址，且不能包含用户信息、查询或片段");
+                !("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))) {
+            throw new IllegalArgumentException("服务地址必须为 HTTP 或 HTTPS，且不能包含用户信息、查询或片段");
         }
         String file = env.getOrDefault("MONITOR_AGENT_TOKEN_FILE", "").trim();
         String token = file.isEmpty() ? required(env, "MONITOR_AGENT_TOKEN") : new String(Files.readAllBytes(Paths.get(file)), StandardCharsets.UTF_8).trim();
