@@ -4,7 +4,7 @@
 
 ## 环境与启动
 
-需要 Java 17、Maven 3.8+。默认使用本地持久化 H2 数据库，启动时由 Flyway 创建表；请备份 `data/` 目录。设置一个至少 32 字符的高强度随机管理员令牌，且不要将令牌提交到仓库。
+需要 Java 8、Maven 3.8+。默认使用本地持久化 H2 数据库，启动时由 Flyway 创建表；请备份 `data/` 目录。设置一个至少 32 字符的高强度随机管理员令牌，且不要将令牌提交到仓库。
 
 ```bash
 export MONITOR_ADMIN_TOKEN='替换为至少32字符的随机令牌'
@@ -75,9 +75,28 @@ mvn -DskipTests clean package
 
 首个迁移 `V1__base_platform.sql` 创建 `ops_server`、`ops_agent`、`ops_instance`、`ops_host_metric` 四张表，以及实例归属和主机指标时间索引；不预置业务数据。当前默认支持 H2 文件数据库，不应在多个服务端进程间直接共享同一个数据库文件。
 
+## 旧版 H2 数据迁移
+
+服务端为兼容 Java 8，使用 Spring Boot 2.7.18、H2 2.2.224 和 Flyway 8.5.13。旧版使用 H2 2.3.232，不能假定旧数据库文件可由新驱动直接打开。**已有数据时先停止旧服务、备份整个数据库目录，再把旧库导出并导入到新的独立目录**，验证数据后再切换 `MONITOR_DB_URL`；不要覆盖原数据库。迁移 SQL 包含令牌摘要等敏感数据，应限制访问并在完成后安全处理。Flyway 8 启动时会提示 H2 2.2 超出其已测试版本；当前迁移副本已验证可读取，生产数据仍需自行备份和核对。
+
+以下示例使用默认 `sa` 和空密码，假定旧服务包为 `old-server.jar`、新服务包为 `new-server.jar`，且路径均为绝对路径；如果设置过密码，需要按实际数据库配置提供凭据。需要 Java 17 执行旧版 H2 导出，Java 8 可执行新版导入：
+
+```bash
+umask 077
+mkdir -p /path/to/secure-migration /path/to/new-data
+unzip -p /path/to/old-server.jar BOOT-INF/lib/h2-2.3.232.jar > /path/to/secure-migration/h2-old.jar
+unzip -p /path/to/new-server.jar BOOT-INF/lib/h2-2.2.224.jar > /path/to/secure-migration/h2-new.jar
+/path/to/java17/bin/java -cp /path/to/secure-migration/h2-old.jar org.h2.tools.Script \
+  -url jdbc:h2:file:/path/to/old-data/monitor -user sa -script /path/to/secure-migration/monitor.sql
+/path/to/java8/bin/java -cp /path/to/secure-migration/h2-new.jar org.h2.tools.RunScript \
+  -url jdbc:h2:file:/path/to/new-data/monitor -user sa -script /path/to/secure-migration/monitor.sql
+```
+
+在新库上启动新服务并核对服务器、Agent 和指标数据；确认后再切换使用。保留旧库备份以便回退。Spring Boot 2.7 社区版已结束维护，应在受控环境中部署并安排后续升级。
+
 ## Linux Agent
 
-Agent 位于 `agent/`，为独立 Java 17 程序，使用 Linux `/proc` 和 Java 文件系统接口采集，无需修改 Nginx 或业务应用。本次不增加数据库表、字段或索引。
+Agent 位于 `agent/`，为独立 Java 8 程序，使用 Linux `/proc` 和 Java 文件系统接口采集，无需修改 Nginx 或业务应用。本次不增加数据库表、字段或索引。
 
 构建：
 

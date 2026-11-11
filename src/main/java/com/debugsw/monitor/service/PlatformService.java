@@ -36,7 +36,7 @@ public class PlatformService {
         String id = UUID.randomUUID().toString();
         jdbc.update("INSERT INTO ops_server(id, name, address, environment, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 id, request.name(), request.address(), request.environment(), request.tags() == null ? "" : request.tags(), now());
-        return Map.of("id", id);
+        return java.util.Collections.singletonMap("id", id);
     }
 
     /** 查询服务器及 Agent 在线状态。 */
@@ -58,7 +58,15 @@ public class PlatformService {
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         String id = UUID.randomUUID().toString();
         jdbc.update("INSERT INTO ops_agent(id, server_id, token_hash, created_at) VALUES (?, ?, ?, ?)", id, serverId, AuthFilter.hash(token), now());
-        return Map.of("agentId", id, "token", token);
+        return agentCredentials(id, token);
+    }
+
+    /** 生成包含 Agent 标识和凭据的响应。 */
+    private Map<String, String> agentCredentials(String id, String token) {
+        Map<String, String> result = new java.util.HashMap<>();
+        result.put("agentId", id);
+        result.put("token", token);
+        return result;
     }
 
     /** 重新签发 Agent 凭据并立即使旧凭据失效。 */
@@ -69,7 +77,7 @@ public class PlatformService {
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         int count = jdbc.update("UPDATE ops_agent SET token_hash = ?, last_heartbeat_at = NULL WHERE server_id = ?", AuthFilter.hash(token), serverId);
         if (count != 1) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Agent 不存在");
-        return Map.of("token", token);
+        return java.util.Collections.singletonMap("token", token);
     }
 
     /** 保存已认证 Agent 的心跳。 */
@@ -85,7 +93,7 @@ public class PlatformService {
         String id = UUID.randomUUID().toString();
         jdbc.update("INSERT INTO ops_instance(id, server_id, name, type, description, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 id, serverId, request.name(), request.type(), request.description() == null ? "" : request.description(), now());
-        return Map.of("id", id);
+        return java.util.Collections.singletonMap("id", id);
     }
 
     /** 查询指定服务器的受管实例。 */

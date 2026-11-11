@@ -1,7 +1,7 @@
 package com.debugsw.monitor.api;
 
 import com.debugsw.monitor.service.PlatformService;
-import jakarta.validation.Valid;
+import javax.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;

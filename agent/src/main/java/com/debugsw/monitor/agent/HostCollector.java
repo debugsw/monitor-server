@@ -37,7 +37,7 @@ public class HostCollector {
         FileStore store = Files.getFileStore(config.diskPath());
         long diskTotal = store.getTotalSpace(), diskFree = store.getUnallocatedSpace();
         if (diskTotal <= 0 || diskFree < 0 || diskFree > diskTotal) throw new IOException("无法读取有效的磁盘容量");
-        double load = Double.parseDouble(Files.readString(config.procRoot().resolve("loadavg")).trim().split("\\s+")[0]);
+        double load = Double.parseDouble(new String(Files.readAllBytes(config.procRoot().resolve("loadavg")), java.nio.charset.StandardCharsets.UTF_8).trim().split("\\s+")[0]);
         if (!Double.isFinite(load) || load < 0) throw new IOException("系统负载无效");
         long[] network = network();
         return String.format(Locale.ROOT, "{\"collectedAt\":\"%s\",\"cpuPercent\":%.3f,\"memoryTotalBytes\":%d,\"memoryUsedBytes\":%d,\"diskTotalBytes\":%d,\"diskUsedBytes\":%d,\"loadOne\":%.3f,\"networkRxBytes\":%d,\"networkTxBytes\":%d}",
@@ -91,5 +91,10 @@ public class HostCollector {
     }
 
     /** CPU 累计时间快照。 */
-    private record CpuTicks(long total, long idle) { }
+    private static class CpuTicks {
+        private final long total;
+        private final long idle;
+        /** 保存 CPU 时间快照。 */
+        private CpuTicks(long total, long idle) { this.total = total; this.idle = idle; }
+    }
 }

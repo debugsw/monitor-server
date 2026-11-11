@@ -1,9 +1,9 @@
 package com.debugsw.monitor.config;
 
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -12,7 +12,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.HexFormat;
 import java.util.List;
 
 /** 校验管理员及 Agent 凭据，并将 Agent 身份绑定到请求。 */
@@ -69,7 +68,10 @@ public class AuthFilter extends OncePerRequestFilter {
     /** 计算令牌摘要，数据库不保存令牌明文。 */
     public static String hash(String token) {
         try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8)));
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder(digest.length * 2);
+            for (byte value : digest) result.append(String.format("%02x", value & 0xff));
+            return result.toString();
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 不可用", e);
         }
