@@ -19,6 +19,7 @@ public class AgentApplication {
         try {
             AgentConfig config = AgentConfig.fromEnvironment(System.getenv());
             HostCollector collector = new HostCollector(config);
+            NginxCollector nginxCollector = new NginxCollector(config.procRoot());
             collector.initialize();
             ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -30,6 +31,10 @@ public class AgentApplication {
                 try { sendSafely(config, "host-metrics", collector.collect()); }
                 catch (Exception e) { LOG.log(Level.WARNING, "采集主机指标失败，将在下一周期重试：{0}", e.getMessage()); }
             }, config.interval().getSeconds(), config.interval().getSeconds(), TimeUnit.SECONDS);
+            scheduler.scheduleWithFixedDelay(() -> {
+                try { sendSafely(config, "nginx-snapshot", nginxCollector.collect()); }
+                catch (Exception e) { LOG.log(Level.WARNING, "采集 Nginx 进程失败，将在下一周期重试：{0}", e.getClass().getSimpleName()); }
+            }, 0, config.interval().getSeconds(), TimeUnit.SECONDS);
             LOG.info("Agent 已启动，心跳和指标采集周期为 " + config.interval().getSeconds() + " 秒");
         } catch (Exception e) {
             LOG.severe("Agent 启动失败：" + e.getMessage());

@@ -11,7 +11,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [servers, setServers] = useState([]);
   const [selectedId, setSelectedId] = useState('');
-  const [detail, setDetail] = useState({ metrics: [], instances: [], loading: false, error: '' });
+  const [detail, setDetail] = useState({ metrics: [], instances: [], nginx: null, loading: false, error: '' });
   const [allInstances, setAllInstances] = useState([]);
   const [instancesError, setInstancesError] = useState('');
   const [page, setPage] = useState('overview');
@@ -36,7 +36,7 @@ export default function App() {
 
   /** 清除当前会话中的凭据和业务数据。 */
   function logout(message = '') {
-    setToken(''); setServers([]); setSelectedId(''); setDetail({ metrics: [], instances: [], loading: false, error: '' }); setAllInstances([]); setModal(null); setLoginError(message); setBanner(''); setUpdatedAt(null);
+    setToken(''); setServers([]); setSelectedId(''); setDetail({ metrics: [], instances: [], nginx: null, loading: false, error: '' }); setAllInstances([]); setModal(null); setLoginError(message); setBanner(''); setUpdatedAt(null);
   }
 
   /** 刷新服务器列表并区分鉴权失败和网络故障。 */
@@ -61,13 +61,13 @@ export default function App() {
   useEffect(() => {
     if (!token || !selectedId) return undefined;
     let active = true;
-    setDetail({ metrics: [], instances: [], loading: true, error: '' });
+    setDetail({ metrics: [], instances: [], nginx: null, loading: true, error: '' });
     /** 并发获取当前服务器的指标与实例。 */
     async function loadDetail() {
-      const results = await Promise.allSettled([request(token, `/servers/${selectedId}/metrics?limit=100`), request(token, `/servers/${selectedId}/instances`)]);
+      const results = await Promise.allSettled([request(token, `/servers/${selectedId}/metrics?limit=100`), request(token, `/servers/${selectedId}/instances`), request(token, `/servers/${selectedId}/nginx`)]);
       if (!active) return;
       if (results.some(r => r.status === 'rejected' && r.reason.status === 401)) { logout('管理员令牌已失效，请重新登录。'); return; }
-      setDetail(old => ({ metrics: results[0].status === 'fulfilled' ? results[0].value : old.metrics, instances: results[1].status === 'fulfilled' ? results[1].value : old.instances, loading: false, error: results.some(r => r.status === 'rejected') ? '部分数据更新失败，请检查连接后重试。' : '' }));
+      setDetail(old => ({ metrics: results[0].status === 'fulfilled' ? results[0].value : old.metrics, instances: results[1].status === 'fulfilled' ? results[1].value : old.instances, nginx: results[2].status === 'fulfilled' ? results[2].value : old.nginx, loading: false, error: results.some(r => r.status === 'rejected') ? '部分数据更新失败，请检查连接后重试。' : '' }));
     }
     loadDetail(); const timer = window.setInterval(loadDetail, 5000);
     return () => { active = false; window.clearInterval(timer); };

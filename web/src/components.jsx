@@ -56,7 +56,7 @@ function MetricChart({ metrics }) {
 }
 
 /** 显示选中服务器的指标、凭据操作和实例列表。 */
-export function ServerDetail({ server, metrics, instances, loading, error, onRegister, onRotate, onAddInstance }) {
+export function ServerDetail({ server, metrics, instances, nginx, loading, error, onRegister, onRotate, onAddInstance }) {
   if (!server) return <section className="panel detail-panel detail-empty"><Server size={30}/><h2>选择一台服务器</h2><p>查看资源使用情况、Agent 和受管实例。</p></section>;
   const latest = metrics[0];
   return <section className="panel detail-panel"><div className="detail-title"><h2>服务器详情</h2><span className="tiny-label">实时概览</span></div><div className="detail-identity"><span className="device-icon"><Server size={19}/></span><div><div className="identity-line"><h3>{server.name}</h3><Status value={server.agentStatus}/></div><span className="muted mono">{server.address}</span></div></div><div className="detail-meta"><span>环境 <b>{server.environment}</b></span><span>Agent 版本 <b>{server.agentVersion || '—'}</b></span></div>
@@ -66,6 +66,9 @@ export function ServerDetail({ server, metrics, instances, loading, error, onReg
     <div className="resources"><Resource icon={Cpu} label="CPU" value={latest?.cpuPercent} sub={latest ? `负载 ${latest.loadOne}` : null}/><Resource icon={Database} label="内存" value={percent(latest?.memoryUsedBytes, latest?.memoryTotalBytes)} sub={latest ? `${bytes(latest.memoryUsedBytes)} / ${bytes(latest.memoryTotalBytes)}` : null}/><Resource icon={HardDrive} label="磁盘" value={percent(latest?.diskUsedBytes, latest?.diskTotalBytes)} sub={latest ? `${bytes(latest.diskUsedBytes)} / ${bytes(latest.diskTotalBytes)}` : null}/></div>
     <div className="section-heading chart-heading"><h3>CPU 使用率趋势</h3><span>最近 {metrics.length} 个采样点</span></div><MetricChart metrics={metrics}/>
     <div className="network"><span>网络接收 <b>{latest ? bytes(latest.networkRxBytes) : '—'}</b></span><span>网络发送 <b>{latest ? bytes(latest.networkTxBytes) : '—'}</b></span><small>累计值</small></div>
+    <div className="section-heading instance-heading"><h3>Nginx 进程</h3><span>{nginx?.collectedAt ? `采集于 ${time(nginx.collectedAt)}` : '尚未采集'}</span></div>
+    {nginx?.partial && <div className="inline-error">部分进程无法读取，结果可能不完整。</div>}
+    {nginx?.instances?.length ? <div className="instance-list">{nginx.instances.map(item => <div className="instance-row" key={item.pid}><span className="instance-icon"><Server size={16}/></span><div><strong>Nginx master · PID {item.pid}</strong><small title={item.executable}>{item.executable || '可执行文件路径不可读取'}</small><small title={item.command}>{item.command}</small></div><span className="type-chip">进程存在</span></div>)}</div> : <div className="instance-empty">{nginx?.collectedAt ? '本次未发现 Nginx master 进程' : '请升级 Agent 并等待采集'}</div>}
     <div className="section-heading instance-heading"><h3>受管实例 <span>({instances.length})</span></h3><button className="text-button" onClick={onAddInstance}><Plus size={15}/>添加实例</button></div>
     {instances.length ? <div className="instance-list">{instances.map(item => <div className="instance-row" key={item.id}><span className="instance-icon"><Box size={16}/></span><div><strong>{item.name}</strong><small>{item.description || '暂无描述'}</small></div><span className="type-chip">{item.type}</span></div>)}</div> : <div className="instance-empty">暂无受管实例</div>}
   </section>;
