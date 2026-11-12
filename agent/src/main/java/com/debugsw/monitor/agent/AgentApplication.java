@@ -19,7 +19,7 @@ public class AgentApplication {
         try {
             AgentConfig config = AgentConfig.fromEnvironment(System.getenv());
             HostCollector collector = new HostCollector(config);
-            NginxCollector nginxCollector = new NginxCollector(config.procRoot());
+            NginxCollector nginxCollector = new NginxCollector(config.procRoot(), "true".equalsIgnoreCase(System.getenv("MONITOR_NGINX_CONFIG_READ")));
             collector.initialize();
             ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
