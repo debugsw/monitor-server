@@ -5,3 +5,5 @@
 .top-status.disconnected i{background:#df6e62}.top-status.disconnected{color:#b75b50}
 
 .nginx-config{margin-top:8px;color:#5b7180;font-size:11px;white-space:normal}.nginx-config summary{cursor:pointer;color:#078f48}.nginx-config pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;background:#f5f8f7;border:1px solid #e2e9e6;padding:10px;color:#344a40}.nginx-config p{color:#b64c43;margin-top:6px}
+
+.nginx-editor{background:white;border:1px solid #e1e8ed;border-radius:9px;margin-top:16px;padding:18px;font-size:12px;color:#60717e}.nginx-editor p{margin:9px 0;overflow-wrap:anywhere}.nginx-editor-controls{display:flex;gap:8px}.nginx-editor-controls input{flex:1}.nginx-editor textarea{width:100%;margin:12px 0}.nginx-editor pre{white-space:pre-wrap;max-height:250px;overflow:auto}.nginx-editor details{margin:10px 0}.nginx-task{color:#667c70}

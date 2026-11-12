@@ -6,7 +6,7 @@ spring:
   flyway:
     enabled: true
 server:
-  address: ${MONITOR_BIND_ADDRESS:127.0.0.1}
+  address: ${MONITOR_BIND_ADDRESS:0.0.0.0}
 monitor:
   admin-token: ${MONITOR_ADMIN_TOKEN:}
   agent-online-seconds: ${MONITOR_AGENT_ONLINE_SECONDS:30}
