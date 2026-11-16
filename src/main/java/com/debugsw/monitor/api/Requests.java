@@ -52,6 +52,18 @@ public final class Requests {
         @NotBlank @Size(max = 100)
         private String version;
 
+        private Boolean nginxTasksReady;
+        @Size(max = 500)
+        private String nginxTasksMessage;
+        /** 获取 Nginx 任务配置状态。 */
+        public Boolean getNginxTasksReady() { return nginxTasksReady; }
+        /** 设置 Nginx 任务配置状态。 */
+        public void setNginxTasksReady(Boolean value) { nginxTasksReady = value; }
+        /** 获取 Nginx 任务状态说明。 */
+        public String getNginxTasksMessage() { return nginxTasksMessage; }
+        /** 设置 Nginx 任务状态说明。 */
+        public void setNginxTasksMessage(String value) { nginxTasksMessage = value; }
+
         /** 获取version。 */
         public String getVersion() { return version; }
         /** 设置version。 */

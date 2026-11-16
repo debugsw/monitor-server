@@ -162,3 +162,11 @@ export MONITOR_NGINX_WRITE_ENABLED=true
 重启 Agent 后，在服务器详情的 Nginx 配置管理区输入 `gateway`，读取后编辑并确认发布。Agent 比对 SHA-256 摘要，保留备份，原子替换单文件并执行 `nginx -t`；校验失败且文件未被外部修改时恢复原文件。校验成功后发送 reload。由于命令退出成功不能证明 master 已应用配置，页面显示 `UNKNOWN`，需要检查 Nginx 错误日志和业务健康状态。超时、运行时错误或外部并发修改同样可能为 `UNKNOWN`，应人工核对备份及运行状态，不要直接重复提交。清单、备份文件、任务记录与配置内容需严格控制访问。
 
 Agent 领取的任务不会自动重新派发，避免意外重复执行；Agent 中断或结果上报失败可能使任务一直停在 `CLAIMED`。配置文件只能逐个发布，无法保证跨文件原子性；外部进程不遵守相同锁时，版本检查不能完全消除并发竞争。真实 Linux Nginx 的部署行为仍需在测试环境验证。
+
+## 任务等待诊断与服务器详情页
+
+Agent 0.2.0 起在心跳上报 Nginx 任务就绪状态。未配置 `MONITOR_NGINX_MANIFEST`、清单不可读取或未包含实例时，管理页面显示原因并阻止新增任务；旧 Agent 未上报能力时提示升级。任务处于 `WAITING` 仅表示尚未被领取，不表示 Nginx 正在处理。已存在的未领取任务两分钟后在查询或领取时标记 `EXPIRED`，需要检查日志和配置后重新提交；已经领取的任务不会自动重复执行。
+
+升级需要同时替换服务端和 Agent；服务端迁移 `V4__nginx_agent_readiness.sql` 为 `ops_agent` 增加 `nginx_tasks_ready` 和 `nginx_tasks_message`，不增加初始化数据。升级前备份数据库。Linux Agent 启动前配置本机清单路径，例如 `export MONITOR_NGINX_MANIFEST=/etc/monitor-agent/nginx.properties`；清单格式见上文，页面实例标识必须与清单一致。读取不需要启用 `MONITOR_NGINX_WRITE_ENABLED`，写入仍需明确开启。设置环境变量后必须在同一环境重启 Agent。
+
+服务器列表点击“详情”进入 `#/servers/<服务器ID>` 二级页面，指标、Agent 操作和 Nginx 配置管理均在详情页显示；支持返回列表、浏览器前进后退和刷新后重新登录进入原详情。任务完成后停止轮询，防止覆盖编辑中的配置。

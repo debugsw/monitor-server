@@ -41,7 +41,7 @@ public class PlatformService {
 
     /** 查询服务器及 Agent 在线状态。 */
     public List<Map<String, Object>> servers() {
-        List<Map<String, Object>> rows = jdbc.queryForList("SELECT s.id AS \"id\", s.name AS \"name\", s.address AS \"address\", s.environment AS \"environment\", s.tags AS \"tags\", s.created_at AS \"createdAt\", a.id AS \"agentId\", a.version AS \"agentVersion\", a.last_heartbeat_at AS \"lastHeartbeatAt\" FROM ops_server s LEFT JOIN ops_agent a ON a.server_id = s.id ORDER BY s.created_at DESC");
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT s.id AS \"id\", s.name AS \"name\", s.address AS \"address\", s.environment AS \"environment\", s.tags AS \"tags\", s.created_at AS \"createdAt\", a.id AS \"agentId\", a.version AS \"agentVersion\", a.last_heartbeat_at AS \"lastHeartbeatAt\", a.nginx_tasks_ready AS \"nginxTasksReady\", a.nginx_tasks_message AS \"nginxTasksMessage\" FROM ops_server s LEFT JOIN ops_agent a ON a.server_id = s.id ORDER BY s.created_at DESC");
         for (Map<String, Object> row : rows) {
             OffsetDateTime heartbeat = (OffsetDateTime) row.get("lastHeartbeatAt");
             row.put("agentStatus", row.get("agentId") == null ? "UNREGISTERED" : heartbeat != null && heartbeat.toInstant().isAfter(Instant.now().minusSeconds(onlineSeconds)) ? "ONLINE" : "OFFLINE");
@@ -82,7 +82,7 @@ public class PlatformService {
 
     /** 保存已认证 Agent 的心跳。 */
     public void heartbeat(String agentId, Requests.Heartbeat request) {
-        if (jdbc.update("UPDATE ops_agent SET version = ?, last_heartbeat_at = ? WHERE id = ?", request.version(), now(), agentId) != 1) {
+        if (jdbc.update("UPDATE ops_agent SET version = ?, last_heartbeat_at = ?, nginx_tasks_ready = ?, nginx_tasks_message = ? WHERE id = ?", request.version(), now(), Boolean.TRUE.equals(request.getNginxTasksReady()), request.getNginxTasksReady() == null ? "Agent 未上报 Nginx 任务能力，请升级 Agent" : request.getNginxTasksMessage(), agentId) != 1) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Agent 不存在");
         }
     }

@@ -12,7 +12,7 @@ import java.util.logging.Logger;
 /** Linux 主机采集 Agent 入口。 */
 public class AgentApplication {
     private static final Logger LOG = Logger.getLogger(AgentApplication.class.getName());
-    private static final String VERSION = "0.1.0";
+    private static final String VERSION = "0.2.0";
 
     /** 启动独立的心跳与采集任务。 */
     public static void main(String[] args) {
@@ -27,7 +27,7 @@ public class AgentApplication {
                 scheduler.shutdownNow();
                 try { scheduler.awaitTermination(5, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             }, "agent-shutdown"));
-            scheduler.scheduleWithFixedDelay(() -> sendSafely(config, "heartbeat", "{\"version\":\"" + VERSION + "\"}"), 0, config.interval().getSeconds(), TimeUnit.SECONDS);
+            scheduler.scheduleWithFixedDelay(() -> sendSafely(config, "heartbeat", taskWorker.heartbeatBody(VERSION)), 0, config.interval().getSeconds(), TimeUnit.SECONDS);
             scheduler.scheduleWithFixedDelay(() -> {
                 try { sendSafely(config, "host-metrics", collector.collect()); }
                 catch (Exception e) { LOG.log(Level.WARNING, "采集主机指标失败，将在下一周期重试：{0}", e.getMessage()); }

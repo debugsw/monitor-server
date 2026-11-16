@@ -22,6 +22,22 @@ public class NginxTaskWorker {
     /** 初始化任务执行器；未指定清单时不领取任务。 */
     public NginxTaskWorker(AgentConfig config, String manifest) { this.config = config; this.manifest = manifest == null || manifest.trim().isEmpty() ? null : Paths.get(manifest); }
 
+    /** 上报任务能力，缺少清单时向平台明确说明原因。 */
+    public String heartbeatBody(String version) {
+        boolean ready = false;
+        String message;
+        if (manifest == null) message = "未配置 MONITOR_NGINX_MANIFEST，请设置清单路径并重启 Agent";
+        else {
+            try (InputStream in = Files.newInputStream(manifest)) {
+                Properties values = new Properties(); values.load(in);
+                ready = values.stringPropertyNames().stream().anyMatch(key -> key.endsWith(".binary"));
+                message = ready ? "已配置任务清单" : "Nginx 清单中没有实例，请配置 <实例标识>.binary 等属性";
+            } catch (IOException | IllegalArgumentException e) { message = "Nginx 清单不可读取或格式错误，请检查文件路径、权限和内容"; }
+        }
+        Map<String, Object> body = new HashMap<>(); body.put("version", version); body.put("nginxTasksReady", ready); body.put("nginxTasksMessage", message);
+        try { return mapper.writeValueAsString(body); } catch (IOException e) { throw new IllegalStateException(e); }
+    }
+
     /** 领取并执行一个任务，网络中断时已领取任务不会自动重试。 */
     public void poll() {
         if (manifest == null) return;

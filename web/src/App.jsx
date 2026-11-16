@@ -5,17 +5,24 @@ import { Login, Modal, ServerDetail, ServerTable, Sidebar, Status, Summary } fro
 import { time } from './format';
 import NginxConfigEditor from './NginxConfigEditor';
 
+/** 从地址栏解析列表和服务器详情路由。 */
+function readRoute() {
+  const match = window.location.hash.match(/^#\/servers\/([A-Za-z0-9-]+)$/);
+  if (match) return { page: 'serverDetail', id: match[1] };
+  return { page: window.location.hash === '#/instances' ? 'instances' : window.location.hash === '#/servers' ? 'servers' : 'overview', id: '' };
+}
+
 /** 管理控制台的身份、数据刷新及交互状态。 */
 export default function App() {
   const [token, setToken] = useState('');
   const [loginError, setLoginError] = useState('');
   const [busy, setBusy] = useState(false);
   const [servers, setServers] = useState([]);
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState(() => readRoute().id);
   const [detail, setDetail] = useState({ metrics: [], instances: [], nginx: null, loading: false, error: '' });
   const [allInstances, setAllInstances] = useState([]);
   const [instancesError, setInstancesError] = useState('');
-  const [page, setPage] = useState('overview');
+  const [page, setPage] = useState(() => readRoute().page);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('ALL');
   const [environment, setEnvironment] = useState('ALL');
@@ -27,10 +34,22 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const server = servers.find(item => item.id === selectedId);
 
+  useEffect(() => {
+    /** 响应浏览器前进、后退及详情页地址。 */
+    function changeRoute() { const route = readRoute(); setPage(route.page); if (route.id) setSelectedId(route.id); }
+    window.addEventListener('hashchange', changeRoute);
+    return () => window.removeEventListener('hashchange', changeRoute);
+  }, []);
+
+  /** 导航到服务器二级详情页。 */
+  function openServer(id) { setSelectedId(id); setPage('serverDetail'); window.location.hash = `/servers/${id}`; }
+  /** 导航到工作空间列表页。 */
+  function openSection(section) { setPage(section); window.location.hash = section === 'overview' ? '/overview' : `/${section}`; }
+
   /** 验证管理员令牌并建立当前页面会话。 */
   async function login(value) {
     setBusy(true); setLoginError('');
-    try { const result = await request(value, '/servers'); setServers(result); setToken(value); setUpdatedAt(new Date()); setSelectedId(result[0]?.id || ''); }
+    try { const result = await request(value, '/servers'); setServers(result); setToken(value); setUpdatedAt(new Date()); setSelectedId(readRoute().id || result[0]?.id || ''); }
     catch (error) { setLoginError(error.message); }
     finally { setBusy(false); }
   }
@@ -45,7 +64,7 @@ export default function App() {
     try {
       const result = await request(token, '/servers');
       setServers(result); setUpdatedAt(new Date()); setBanner('');
-      setSelectedId(current => result.some(item => item.id === current) ? current : (result[0]?.id || ''));
+      setSelectedId(current => readRoute().id || (result.some(item => item.id === current) ? current : (result[0]?.id || '')));
     } catch (error) {
       if (error.status === 401) logout('管理员令牌已失效，请重新登录。');
       else setBanner(`服务器列表更新失败：${error.message}`);
@@ -60,7 +79,7 @@ export default function App() {
   }, [token, loadServers, refreshKey]);
 
   useEffect(() => {
-    if (!token || !selectedId) return undefined;
+    if (!token || !selectedId || page !== 'serverDetail') return undefined;
     let active = true;
     setDetail({ metrics: [], instances: [], nginx: null, loading: true, error: '' });
     /** 并发获取当前服务器的指标与实例。 */
@@ -72,7 +91,7 @@ export default function App() {
     }
     loadDetail(); const timer = window.setInterval(loadDetail, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [token, selectedId, refreshKey]);
+  }, [token, selectedId, page, refreshKey]);
 
   useEffect(() => {
     if (!token || page !== 'instances') return undefined;
@@ -118,10 +137,10 @@ export default function App() {
   }
 
   if (!token) return <Login onLogin={login} error={loginError} busy={busy}/>;
-  return <div className="app"><Sidebar page={page} setPage={setPage} onLogout={() => logout()}/><main className="main"><header className="topbar"><span>工作空间 <ChevronRight size={14}/> {page === 'instances' ? '受管实例' : page === 'servers' ? '服务器' : '概览'}</span><div><span className={`top-status ${banner ? "disconnected" : ""}`}><i/>{banner ? "连接异常" : "管理端已连接"}</span><button className="refresh" onClick={() => setRefreshKey(n => n + 1)}><RefreshCw size={15}/>刷新</button></div></header>
-    <div className="content"><div className="page-title"><div><h1>{page === 'instances' ? '受管实例' : page === 'servers' ? '服务器管理' : '服务器概览'}</h1><p>{page === 'instances' ? '集中查看各服务器上登记的受管实例。' : '集中查看服务器运行状态、Agent 连接情况与受管实例。'}</p></div><button className="primary" onClick={() => openModal('server')}><Plus size={17}/>添加服务器</button></div>
+  return <div className="app"><Sidebar page={page === 'serverDetail' ? 'servers' : page} setPage={openSection} onLogout={() => logout()}/><main className="main"><header className="topbar"><span>工作空间 <ChevronRight size={14}/> {page === 'instances' ? '受管实例' : page === 'serverDetail' ? '服务器 / 详情' : page === 'servers' ? '服务器' : '概览'}</span><div><span className={`top-status ${banner ? "disconnected" : ""}`}><i/>{banner ? "连接异常" : "管理端已连接"}</span><button className="refresh" onClick={() => setRefreshKey(n => n + 1)}><RefreshCw size={15}/>刷新</button></div></header>
+    <div className="content"><div className="page-title"><div><h1>{page === 'instances' ? '受管实例' : page === 'serverDetail' ? (server?.name || '服务器详情') : page === 'servers' ? '服务器管理' : '服务器概览'}</h1><p>{page === 'instances' ? '集中查看各服务器上登记的受管实例。' : '集中查看服务器运行状态、Agent 连接情况与受管实例。'}</p></div>{page === 'serverDetail' ? <button className="secondary" onClick={() => openSection('servers')}>返回服务器列表</button> : <button className="primary" onClick={() => openModal('server')}><Plus size={17}/>添加服务器</button>}</div>
     {banner && <div className="banner" role="alert">{banner}</div>}
-    {page === 'instances' ? <section className="panel instance-page"><div className="panel-heading"><div><h2>实例列表</h2><span className="count">共 {allInstances.length} 个实例</span></div></div>{instancesError && <div className="inline-error">{instancesError}</div>}{allInstances.length ? <div className="table-scroll"><table><thead><tr><th>实例名称</th><th>类型</th><th>所属服务器</th><th>描述</th><th>登记时间</th><th>操作</th></tr></thead><tbody>{allInstances.map(item => <tr key={item.id}><td><span className="server-name"><Box size={16}/>{item.name}</span></td><td><span className="type-chip">{item.type}</span></td><td>{item.serverName} <span className="muted">{item.serverAddress}</span></td><td>{item.description || '—'}</td><td>{time(item.createdAt)}</td><td><button className="text-button" onClick={() => { setSelectedId(item.serverId); setPage('servers'); }}>查看服务器</button></td></tr>)}</tbody></table></div> : <div className="empty"><Box size={26}/><strong>暂无受管实例</strong><span>在服务器详情中添加实例。</span></div>}</section> : <><Summary servers={servers}/><div className="workspace"><ServerTable servers={servers} selectedId={selectedId} onSelect={setSelectedId} query={query} setQuery={setQuery} status={status} setStatus={setStatus} environment={environment} setEnvironment={setEnvironment} onAdd={() => openModal('server')}/><ServerDetail server={server} {...detail} onRegister={() => openModal('register')} onRotate={() => openModal('rotate')} onAddInstance={() => openModal('instance')}/></div>{server && <NginxConfigEditor key={server.id} token={token} serverId={server.id}/>}<div className="update-note"><Clock3 size={14}/>每 5 秒更新 · 最近更新 {time(updatedAt)}</div></>}
+    {page === 'instances' ? <section className="panel instance-page"><div className="panel-heading"><div><h2>实例列表</h2><span className="count">共 {allInstances.length} 个实例</span></div></div>{instancesError && <div className="inline-error">{instancesError}</div>}{allInstances.length ? <div className="table-scroll"><table><thead><tr><th>实例名称</th><th>类型</th><th>所属服务器</th><th>描述</th><th>登记时间</th><th>操作</th></tr></thead><tbody>{allInstances.map(item => <tr key={item.id}><td><span className="server-name"><Box size={16}/>{item.name}</span></td><td><span className="type-chip">{item.type}</span></td><td>{item.serverName} <span className="muted">{item.serverAddress}</span></td><td>{item.description || '—'}</td><td>{time(item.createdAt)}</td><td><button className="text-button" onClick={() => openServer(item.serverId)}>查看服务器</button></td></tr>)}</tbody></table></div> : <div className="empty"><Box size={26}/><strong>暂无受管实例</strong><span>在服务器详情中添加实例。</span></div>}</section> : page === 'serverDetail' ? <>{server ? <div className="server-detail-page"><ServerDetail server={server} {...detail} onRegister={() => openModal('register')} onRotate={() => openModal('rotate')} onAddInstance={() => openModal('instance')}/><NginxConfigEditor key={server.id} token={token} serverId={server.id} ready={server.nginxTasksReady && server.agentStatus === 'ONLINE'} readinessMessage={server.agentStatus !== 'ONLINE' ? 'Agent 离线，请检查 Agent 服务' : server.nginxTasksMessage || 'Agent 未上报任务能力，请升级 Agent 并配置清单'}/></div> : <div className="panel empty">服务器不存在或列表尚未加载</div>}</> : <><Summary servers={servers}/><ServerTable servers={servers} selectedId={null} onSelect={openServer} query={query} setQuery={setQuery} status={status} setStatus={setStatus} environment={environment} setEnvironment={setEnvironment} onAdd={() => openModal('server')}/><div className="update-note"><Clock3 size={14}/>每 5 秒更新 · 最近更新 {time(updatedAt)}</div></>}
     </div></main>
     {modal && <Modal title={{ server: '添加服务器', instance: '添加受管实例', register: '注册 Agent', rotate: '重新签发凭据', token: 'Agent 凭据' }[modal.name]} subtitle={modal.name === 'instance' ? `所属服务器：${server?.name}` : modal.name === 'register' || modal.name === 'rotate' ? `服务器：${server?.name}` : undefined} onClose={() => { if (!busy) setModal(null); }}>
       {modal.name === 'token' ? <><p className="modal-copy">请立即保存此令牌，关闭后将无法再次查看。</p>{modal.agentId && <p className="modal-copy">Agent ID：<span className="mono">{modal.agentId}</span></p>}<textarea aria-label="Agent 令牌" readOnly value={modal.value} rows="3" onFocus={e => e.target.select()}/>{modalError && <div className="form-error">{modalError}</div>}<div className="modal-actions"><button className="secondary" onClick={copyToken}><Copy size={15}/>{copied ? '已复制' : '复制令牌'}</button><button className="primary" onClick={() => setModal(null)}>已保存</button></div></> : <form onSubmit={submit}>

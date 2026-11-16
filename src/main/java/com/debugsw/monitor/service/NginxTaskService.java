@@ -14,6 +14,8 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class NginxTaskService {
     private final JdbcTemplate jdbc;
+    @org.springframework.beans.factory.annotation.Value("${monitor.agent-online-seconds}")
+    private long onlineSeconds;
     /** 注入数据库访问组件。 */
     public NginxTaskService(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
@@ -27,6 +29,9 @@ public class NginxTaskService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "实例标识或操作类型无效");
         if ("PUBLISH".equals(operation) && (digest == null || !digest.matches("[0-9a-f]{64}") || content == null || content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 65536))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "配置内容或版本摘要无效");
+        String unavailable = readiness(serverId);
+        if (unavailable != null) throw new ResponseStatusException(HttpStatus.CONFLICT, unavailable);
+        expireWaiting(serverId);
         String id = UUID.randomUUID().toString(); OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         jdbc.update("INSERT INTO ops_nginx_task(id, server_id, instance_key, operation, state, expected_digest, config_content, created_at) VALUES(?,?,?,?,?,?,?,?)", id, serverId, instance, operation, "WAITING", digest, content, now);
         if ("PUBLISH".equals(operation)) jdbc.update("INSERT INTO ops_nginx_publish_record(task_id,server_id,instance_key,expected_digest,state,created_at) VALUES(?,?,?,?,?,?)", id, serverId, instance, digest, "WAITING", now);
@@ -39,6 +44,7 @@ public class NginxTaskService {
         List<String> servers = jdbc.query("SELECT server_id FROM ops_agent WHERE id=?", (rs, n) -> rs.getString(1), agentId);
         if (servers.isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Agent 不存在");
         String server = servers.get(0);
+        expireWaiting(server);
         List<String> ids = jdbc.query("SELECT id FROM ops_nginx_task WHERE server_id=? AND state='WAITING' ORDER BY created_at LIMIT 1", (rs,n)->rs.getString(1), server);
         if (ids.isEmpty()) return Collections.emptyMap();
         String id = ids.get(0);
@@ -62,6 +68,25 @@ public class NginxTaskService {
         jdbc.update("UPDATE ops_nginx_publish_record SET state=?,message=?,result_digest=?,completed_at=? WHERE task_id=?", state,message,digest,now,taskId);
     }
 
+    /** 返回 Agent 不可执行任务的具体原因。 */
+    private String readiness(String serverId) {
+        List<Map<String, Object>> rows = jdbc.query("SELECT last_heartbeat_at, nginx_tasks_ready, nginx_tasks_message FROM ops_agent WHERE server_id=?", (rs,n) -> {
+            Map<String,Object> row = new HashMap<>(); row.put("heartbeat", rs.getObject(1, OffsetDateTime.class)); row.put("ready", rs.getBoolean(2)); row.put("message", rs.getString(3)); return row;
+        }, serverId);
+        if (rows.isEmpty()) return "请先为服务器注册 Agent";
+        Map<String,Object> row = rows.get(0); OffsetDateTime heartbeat = (OffsetDateTime)row.get("heartbeat");
+        if (heartbeat == null || heartbeat.isBefore(OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(onlineSeconds))) return "Agent 离线，请检查 Agent 日志、网络和凭据";
+        if (!Boolean.TRUE.equals(row.get("ready"))) return row.get("message") == null ? "Agent 未就绪：请升级 Agent 并配置 MONITOR_NGINX_MANIFEST" : row.get("message").toString();
+        return null;
+    }
+
+    /** 未领取的任务两分钟后过期，防止恢复连接后执行陈旧发布。 */
+    private void expireWaiting(String serverId) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        jdbc.update("UPDATE ops_nginx_task SET state='EXPIRED', result_message='等待 Agent 领取超时，请检查 Agent 配置后重新操作', completed_at=? WHERE server_id=? AND state='WAITING' AND created_at < ?", now, serverId, now.minusSeconds(120));
+        jdbc.update("UPDATE ops_nginx_publish_record SET state='EXPIRED', message='等待 Agent 领取超时', completed_at=? WHERE server_id=? AND state='WAITING' AND task_id IN (SELECT id FROM ops_nginx_task WHERE state='EXPIRED')", now, serverId);
+    }
+
     /** 查询指定服务器最近的配置发布记录。 */
     public List<Map<String, Object>> publications(String serverId) {
         return jdbc.query("SELECT task_id,instance_key,state,message,expected_digest,result_digest,created_at,completed_at FROM ops_nginx_publish_record WHERE server_id=? ORDER BY created_at DESC LIMIT 100", (rs,n) -> {
@@ -70,11 +95,18 @@ public class NginxTaskService {
     }
 
     /** 查询指定服务器的单条任务结果。 */
+    @Transactional
     public Map<String, Object> read(String serverId, String taskId) {
+        expireWaiting(serverId);
         try {
-            return jdbc.queryForObject("SELECT id,instance_key,operation,state,result_message,result_content,result_digest,created_at,claimed_at,completed_at FROM ops_nginx_task WHERE server_id=? AND id=?", (rs,n)-> {
+            Map<String, Object> result = jdbc.queryForObject("SELECT id,instance_key,operation,state,result_message,result_content,result_digest,created_at,claimed_at,completed_at FROM ops_nginx_task WHERE server_id=? AND id=?", (rs,n)-> {
                 Map<String,Object> item = new HashMap<>(); item.put("id",rs.getString(1));item.put("instanceKey",rs.getString(2));item.put("operation",rs.getString(3));item.put("state",rs.getString(4));item.put("message",rs.getString(5));item.put("content",rs.getString(6));item.put("digest",rs.getString(7));item.put("createdAt",rs.getObject(8));item.put("claimedAt",rs.getObject(9));item.put("completedAt",rs.getObject(10));return item;
             }, serverId, taskId);
+            if ("WAITING".equals(result.get("state"))) {
+                String reason = readiness(serverId);
+                result.put("waitingReason", reason == null ? "等待 Agent 领取，请确认新版本 Agent 的任务轮询连接正常" : reason);
+            }
+            return result;
         } catch (EmptyResultDataAccessException e) { throw new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在"); }
     }
 }
